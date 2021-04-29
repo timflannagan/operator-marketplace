@@ -6,7 +6,7 @@ MOCKS_DIR := ./pkg/mocks
 CONTROLLER_RUNTIME_PKG := sigs.k8s.io/controller-runtime/pkg
 OPERATORSOURCE_MOCK_PKG := operatorsource_mocks
 
-# If the GOBIN environment variable is set, 'go install' will install the 
+# If the GOBIN environment variable is set, 'go install' will install the
 # commands to the directory it names, otherwise it will default of $GOPATH/bin.
 # GOBIN must be an absolute path.
 ifeq ($(GOBIN),)
@@ -34,3 +34,7 @@ e2e-job:
 
 e2e-test-minikube:
 	./scripts/e2e-tests.sh minikube
+
+.PHONY: manifests
+manifests:
+	./scripts/update-manifests.sh
