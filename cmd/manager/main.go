@@ -159,6 +159,7 @@ func main() {
 		logger.Info("registering components")
 		var statusReporter status.Reporter = &status.NoOpReporter{}
 		if clusterOperatorName != "" {
+			logger.Info("setting up the marketplace clusteroperator status reporter")
 			statusReporter, err = status.NewReporter(cfg, mgr, namespace, clusterOperatorName, os.Getenv("RELEASE_VERSION"), stopCh)
 			if err != nil {
 				logger.Fatal(err)
@@ -175,17 +176,21 @@ func main() {
 			logger.Fatal(err)
 		}
 
+		logger.Info("ensuring the default catalogsource resources")
 		if err := ensureDefaults(cfg, mgr.GetScheme()); err != nil {
 			logger.Fatalf("failed to setup the default catalogsource manifests: %v", err)
 		}
+
+		// start reporting the marketplace clusteroperator status reporting before
+		// starting the manager instance as mgr.Start is blocking
+		logger.Info("starting the marketplace clusteroperator status reporter")
+		statusReportingDoneCh := statusReporter.StartReporting()
 
 		logger.Info("starting manager")
 		if err := mgr.Start(stopCh); err != nil {
 			logger.WithError(err).Error("unable to run manager")
 		}
 
-		// statusReportingDoneCh will be closed after the operator has successfully stopped reporting ClusterOperator status.
-		statusReportingDoneCh := statusReporter.StartReporting()
 		// Wait for ClusterOperator status reporting routine to close the statusReportingDoneCh channel.
 		<-statusReportingDoneCh
 	}
@@ -197,7 +202,7 @@ func main() {
 
 	id := os.Getenv("POD_NAME")
 	if id == "" {
-		logger.Info("failed to determine $POD_NAME falling back to hostname")
+		logger.Warn("failed to determine $POD_NAME falling back to hostname")
 		id, err = os.Hostname()
 		if err != nil {
 			logger.Fatal(err)
@@ -238,8 +243,9 @@ func main() {
 	})
 }
 
-// ensureDefaults ensures that all the default OperatorSources are present on
-// the cluster
+// ensureDefaults is responsible for ensuring that the list of default
+// CatalogSource on-disk manifests are present on-cluster, or absent
+// if disabled in the OperatorHub cluster singleton type.
 func ensureDefaults(cfg *rest.Config, scheme *kruntime.Scheme) error {
 	// The default client serves read requests from the cache which only gets
 	// initialized after mgr.Start(). So we need to instantiate a new client
